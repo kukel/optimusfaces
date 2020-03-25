@@ -64,6 +64,7 @@ import org.omnifaces.utils.collection.PartialResultList;
 import org.omnifaces.utils.reflect.Getter;
 import org.primefaces.component.api.UIColumn;
 import org.primefaces.component.datatable.DataTable;
+import org.primefaces.model.FilterMeta;
 import org.primefaces.model.LazyDataModel;
 import org.primefaces.model.SortOrder;
 
@@ -118,7 +119,7 @@ public class LazyPagedDataModel<E extends Identifiable<?>> extends LazyDataModel
 	// Actions --------------------------------------------------------------------------------------------------------
 
 	@Override
-	public List<E> load(int offset, int limit, String tableSortField, SortOrder tableSortOrder, Map<String, Object> tableFilters) {
+	public List<E> load(int offset, int limit, String tableSortField, SortOrder tableSortOrder, Map<String, FilterMeta> tableFilters) {
 		FacesContext context = getContext();
 		DataTable table = getTable();
 		List<UIColumn> processableColumns = table.getColumns().stream().filter(this::isProcessableColumn).collect(toList());
@@ -241,13 +242,18 @@ public class LazyPagedDataModel<E extends Identifiable<?>> extends LazyDataModel
 		return ordering;
 	}
 
-	protected LinkedHashMap<String, Object> processFilters(FacesContext context, DataTable table, List<UIColumn> processableColumns, Map<String, Object> tableFilters) {
+	protected LinkedHashMap<String, Object> processFilters(FacesContext context, DataTable table, List<UIColumn> processableColumns, Map<String, FilterMeta> tableFilters) {
 		LinkedHashMap<String, Object> mergedFilters = new LinkedHashMap<>();
 
 		for (UIColumn column : processableColumns) {
 			String field = column.getField();
-			Object value = tableFilters.get(field);
 
+			FilterMeta filterMeta = tableFilters.get(field);
+			Object value = null;
+			if (filterMeta != null) {
+				value = filterMeta.getFilterValue();
+			}			
+			
 			if (isEmpty(value)) {
 				value = getTrimmedQueryParameters(context, getFilterParameterName(context, table, field));
 			}
@@ -270,8 +276,12 @@ public class LazyPagedDataModel<E extends Identifiable<?>> extends LazyDataModel
 	}
 
 	protected String processGlobalFilter(FacesContext context, DataTable table, Map<String, Object> tableFilters) {
-		String globalFilter = (String) tableFilters.get(GLOBAL_FILTER);
-
+		String globalFilter = null;
+		FilterMeta filterMeta= tableFilters.get(GLOBAL_FILTER);
+		if (filterMeta != null) {
+			globalFilter = (String)filterMeta.getFilterValue();
+		}
+		
 		if (globalFilter != null) {
 			globalFilter = globalFilter.trim();
 		}
