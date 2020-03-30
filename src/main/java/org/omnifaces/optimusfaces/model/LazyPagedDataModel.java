@@ -1,10 +1,10 @@
 /*
- * Copyright 2019 OmniFaces
+ * Copyright 2020 OmniFaces
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
  * the License. You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ *     https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
  * an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
@@ -30,6 +30,7 @@ import static org.omnifaces.util.FacesLocal.getRequestParameterValues;
 import static org.omnifaces.util.FacesLocal.isAjaxRequest;
 import static org.omnifaces.utils.Lang.coalesce;
 import static org.omnifaces.utils.Lang.isEmpty;
+import static org.omnifaces.utils.reflect.Reflections.invokeGetter;
 import static org.omnifaces.utils.stream.Collectors.toLinkedMap;
 import static org.omnifaces.utils.stream.Collectors.toLinkedSet;
 import static org.omnifaces.utils.stream.Streams.stream;
@@ -64,7 +65,6 @@ import org.omnifaces.utils.collection.PartialResultList;
 import org.omnifaces.utils.reflect.Getter;
 import org.primefaces.component.api.UIColumn;
 import org.primefaces.component.datatable.DataTable;
-import org.primefaces.model.FilterMeta;
 import org.primefaces.model.LazyDataModel;
 import org.primefaces.model.SortOrder;
 
@@ -119,7 +119,7 @@ public class LazyPagedDataModel<E extends Identifiable<?>> extends LazyDataModel
 	// Actions --------------------------------------------------------------------------------------------------------
 
 	@Override
-	public List<E> load(int offset, int limit, String tableSortField, SortOrder tableSortOrder, Map<String, FilterMeta> tableFilters) {
+	public List<E> load(int offset, int limit, String tableSortField, SortOrder tableSortOrder, Map<String, Object> tableFilters) {
 		FacesContext context = getContext();
 		DataTable table = getTable();
 		List<UIColumn> processableColumns = table.getColumns().stream().filter(this::isProcessableColumn).collect(toList());
@@ -242,18 +242,13 @@ public class LazyPagedDataModel<E extends Identifiable<?>> extends LazyDataModel
 		return ordering;
 	}
 
-	protected LinkedHashMap<String, Object> processFilters(FacesContext context, DataTable table, List<UIColumn> processableColumns, Map<String, FilterMeta> tableFilters) {
+	protected LinkedHashMap<String, Object> processFilters(FacesContext context, DataTable table, List<UIColumn> processableColumns, Map<String, Object> tableFilters) {
 		LinkedHashMap<String, Object> mergedFilters = new LinkedHashMap<>();
 
 		for (UIColumn column : processableColumns) {
 			String field = column.getField();
+			Object value = getFilterValue(tableFilters, field);
 
-			FilterMeta filterMeta = tableFilters.get(field);
-			Object value = null;
-			if (filterMeta != null) {
-				value = filterMeta.getFilterValue();
-			}			
-			
 			if (isEmpty(value)) {
 				value = getTrimmedQueryParameters(context, getFilterParameterName(context, table, field));
 			}
@@ -276,12 +271,8 @@ public class LazyPagedDataModel<E extends Identifiable<?>> extends LazyDataModel
 	}
 
 	protected String processGlobalFilter(FacesContext context, DataTable table, Map<String, Object> tableFilters) {
-		String globalFilter = null;
-		FilterMeta filterMeta= tableFilters.get(GLOBAL_FILTER);
-		if (filterMeta != null) {
-			globalFilter = (String)filterMeta.getFilterValue();
-		}
-		
+		String globalFilter = getFilterValue(tableFilters, GLOBAL_FILTER);
+
 		if (globalFilter != null) {
 			globalFilter = globalFilter.trim();
 		}
@@ -291,6 +282,20 @@ public class LazyPagedDataModel<E extends Identifiable<?>> extends LazyDataModel
 		}
 
 		return isEmpty(globalFilter) ? null : globalFilter;
+	}
+
+	private String getFilterValue(Map<String, Object> tableFilters, String field) {
+		Object filterValue = tableFilters.get(field);
+
+		if (filterValue == null) {
+			return null;
+		}
+		else if (filterValue instanceof String) {
+			return (String) filterValue;
+		}
+		else {
+			return invokeGetter(filterValue, "filterValue"); // org.primefaces.model.FilterMeta, introduced since PrimeFaces 8.0
+		}
 	}
 
 	private String getFilterParameterName(FacesContext context, DataTable table, String field) {

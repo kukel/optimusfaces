@@ -1,10 +1,10 @@
 /*
- * Copyright 2019 OmniFaces
+ * Copyright 2020 OmniFaces
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
  * the License. You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ *     https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
  * an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
@@ -52,6 +52,7 @@ import org.jboss.arquillian.graphene.proxy.GrapheneProxyInstance;
 import org.jboss.arquillian.graphene.spi.configuration.GrapheneConfiguration;
 import org.jboss.arquillian.test.api.ArquillianResource;
 import org.jboss.shrinkwrap.api.asset.EmptyAsset;
+import org.jboss.shrinkwrap.api.exporter.ZipExporter;
 import org.jboss.shrinkwrap.api.spec.WebArchive;
 import org.jboss.shrinkwrap.resolver.api.maven.Maven;
 import org.jboss.shrinkwrap.resolver.api.maven.MavenResolverSystem;
@@ -99,12 +100,14 @@ public abstract class OptimusFacesIT {
 			.addPackage(packageName + ".view")
 			.addAsWebInfResource(EmptyAsset.INSTANCE, "beans.xml")
 			.addAsLibrary(new File(getProperty("optimusfaces.jar")))
-			.addAsLibraries(maven.loadPomFromFile("pom.xml").importRuntimeDependencies().resolve().withTransitivity().asFile())
+			.addAsLibraries(maven.loadPomFromFile("pom.xml").importCompileAndRuntimeDependencies().resolve().withTransitivity().asFile())
 			.addAsLibraries(maven.resolve("org.omnifaces:omnifaces:" + getProperty("test.omnifaces.version"), "org.primefaces:primefaces:" + getProperty("test.primefaces.version")).withTransitivity().asFile());
 
 		addDataSourceConfig(database, archive);
 		addPersistenceConfig(maven, archive);
 		addResources(new File(testClass.getClassLoader().getResource(packageName).getFile()), "", archive::addAsWebResource);
+
+		archive.as(ZipExporter.class).exportTo(new File("/tmp/test.war"), true);
 
 		return archive;
 	}
@@ -213,12 +216,13 @@ public abstract class OptimusFacesIT {
 	}
 
 	protected void open(String type, String queryString) {
-		String url = baseURL + OptimusFacesIT.class.getSimpleName() + type + (isTomEE() ? ".jsf" : ".xhtml"); // MyFaces has no implicit mapping for .xhtml (yet).
+		String url = baseURL + "/" + OptimusFacesIT.class.getSimpleName() + type + ".xhtml";
 
 		if (queryString != null) {
 			url += "?" + queryString;
 		}
 
+		browser.manage().deleteAllCookies(); // Else IT on pagination/sorting may fail because they're apparently cached somewhere in session. TODO: investigate
 		browser.get(url);
 		waitGui(browser);
 	}
@@ -667,26 +671,19 @@ public abstract class OptimusFacesIT {
 		assertPaginatorState(1, 38);
 		assertFilteredState(idColumnFilter, "3");
 
-		if (isOpenJPA() && isPostgreSQL()) {
-			System.out.println("SKIPPING globalFilter test for OpenJPA on PostgreSQL because it doesn't support LocalDate in LIKE");
-			// org.postgresql.util.PSQLException: ERROR: function lower(bytea) does not exist
-		}
-		else {
-			globalFilter.sendKeys("FEMALE");
-			guardAjax(globalFilterButton).click();
-			int totalRecords2 = getRowCount();
-			assertTrue(totalRecords2 + " must be less than " + totalRecords1, totalRecords2 < totalRecords1);
-			assertGlobalFilterState("FEMALE");
-			assertFilteredState(idColumnFilter, "3");
+		globalFilter.sendKeys("FEMALE");
+		guardAjax(globalFilterButton).click();
+		int totalRecords2 = getRowCount();
+		assertTrue(totalRecords2 + " must be less than " + totalRecords1, totalRecords2 < totalRecords1);
+		assertGlobalFilterState("FEMALE");
+		assertFilteredState(idColumnFilter, "3");
 
-			globalFilter.clear();
-			guardAjax(globalFilterButton).click();
-			assertPaginatorState(1, 38);
-			assertFilteredState(idColumnFilter, "3");
-		}
+		globalFilter.sendKeys(Keys.BACK_SPACE, Keys.BACK_SPACE, Keys.BACK_SPACE, Keys.BACK_SPACE, Keys.BACK_SPACE, Keys.BACK_SPACE);
+		guardAjax(globalFilterButton).click();
+		assertPaginatorState(1, 38);
+		assertFilteredState(idColumnFilter, "3");
 
-		idColumnFilter.clear();
-		guardAjax(idColumnFilter).sendKeys(Keys.TAB);
+		guardAjax(idColumnFilter).sendKeys(Keys.BACK_SPACE);
 		assertPaginatorState(1, TOTAL_RECORDS);
 
 		guardAjax(genderColumnFilter).sendKeys("FEMALE");
@@ -701,13 +698,11 @@ public abstract class OptimusFacesIT {
 		assertFilteredState(emailColumnFilter, "1");
 		assertFilteredState(genderColumnFilter, "FEMALE");
 
-		genderColumnFilter.clear();
-		guardAjax(genderColumnFilter).sendKeys(Keys.TAB);
+		guardAjax(genderColumnFilter).sendKeys(Keys.BACK_SPACE, Keys.BACK_SPACE, Keys.BACK_SPACE, Keys.BACK_SPACE, Keys.BACK_SPACE, Keys.BACK_SPACE);
 		assertPaginatorState(1, 119);
 		assertFilteredState(emailColumnFilter, "1");
 
-		emailColumnFilter.clear();
-		guardAjax(emailColumnFilter).sendKeys(Keys.TAB);
+		guardAjax(emailColumnFilter).sendKeys(Keys.BACK_SPACE);
 		assertPaginatorState(1, TOTAL_RECORDS);
 	}
 
@@ -736,35 +731,28 @@ public abstract class OptimusFacesIT {
 		assertFilteredState(emailColumnFilter, "1");
 		assertSortedState(emailColumn, false);
 
-		if (isOpenJPA() && isPostgreSQL()) {
-			System.out.println("SKIPPING globalFilter test for OpenJPA on PostgreSQL because it doesn't support LocalDate in LIKE");
-			// org.postgresql.util.PSQLException: ERROR: function lower(bytea) does not exist
-		}
-		else {
-			globalFilter.sendKeys("FEMALE");
-			guardAjax(globalFilterButton).click();
-			int totalRecords1 = getRowCount();
-			assertTrue(totalRecords1 + " must be less than 119", totalRecords1 < 119);
-			assertFilteredState(emailColumnFilter, "1");
-			assertGlobalFilterState("FEMALE");
-			assertSortedState(emailColumn, false);
+		globalFilter.sendKeys("FEMALE");
+		guardAjax(globalFilterButton).click();
+		int totalRecords1 = getRowCount();
+		assertTrue(totalRecords1 + " must be less than 119", totalRecords1 < 119);
+		assertFilteredState(emailColumnFilter, "1");
+		assertGlobalFilterState("FEMALE");
+		assertSortedState(emailColumn, false);
 
-			guardAjax(idColumn).click();
-			int totalRecords2 = getRowCount();
-			assertTrue(totalRecords1 + " must be equal to " + totalRecords2, totalRecords1 == totalRecords2);
-			assertFilteredState(emailColumnFilter, "1");
-			assertGlobalFilterState("FEMALE");
-			assertSortedState(idColumn, true);
+		guardAjax(idColumn).click();
+		int totalRecords2 = getRowCount();
+		assertTrue(totalRecords1 + " must be equal to " + totalRecords2, totalRecords1 == totalRecords2);
+		assertFilteredState(emailColumnFilter, "1");
+		assertGlobalFilterState("FEMALE");
+		assertSortedState(idColumn, true);
 
-			globalFilter.clear();
-			guardAjax(globalFilterButton).click();
-			assertPaginatorState(1, 119);
-			assertFilteredState(emailColumnFilter, "1");
-			assertSortedState(idColumn, true);
-		}
+		globalFilter.sendKeys(Keys.BACK_SPACE, Keys.BACK_SPACE, Keys.BACK_SPACE, Keys.BACK_SPACE, Keys.BACK_SPACE, Keys.BACK_SPACE);;
+		guardAjax(globalFilterButton).click();
+		assertPaginatorState(1, 119);
+		assertFilteredState(emailColumnFilter, "1");
+		assertSortedState(idColumn, true);
 
-		emailColumnFilter.clear();
-		guardAjax(emailColumnFilter).sendKeys(Keys.TAB);
+		guardAjax(emailColumnFilter).sendKeys(Keys.BACK_SPACE);
 		assertPaginatorState(1, TOTAL_RECORDS);
 	}
 
@@ -782,21 +770,15 @@ public abstract class OptimusFacesIT {
 		assertPaginatorState(1, 38);
 		assertSortedState(emailColumn, true);
 
-		if (isOpenJPA() && isPostgreSQL()) {
-			System.out.println("SKIPPING globalFilter test for OpenJPA on PostgreSQL because it doesn't support LocalDate in LIKE");
-			// org.postgresql.util.PSQLException: ERROR: function lower(bytea) does not exist
-		}
-		else {
-			open(type, "p=3&o=-email&q=MALE");
-			int totalRecords = getRowCount();
-			assertPaginatorState(3, totalRecords);
-			assertSortedState(emailColumn, false);
-			assertGlobalFilterState("MALE");
-			guardAjax(emailColumn).click();
-			assertPaginatorState(1, totalRecords);
-			assertSortedState(emailColumn, true);
-			assertGlobalFilterState("MALE");
-		}
+		open(type, "p=3&o=-email&q=MALE");
+		int totalRecords = getRowCount();
+		assertPaginatorState(3, totalRecords);
+		assertSortedState(emailColumn, false);
+		assertGlobalFilterState("MALE");
+		guardAjax(emailColumn).click();
+		assertPaginatorState(1, totalRecords);
+		assertSortedState(emailColumn, true);
+		assertGlobalFilterState("MALE");
 
 		open(type, "o=dateOfBirth");
 		assertPaginatorState(1);
@@ -821,20 +803,13 @@ public abstract class OptimusFacesIT {
 		int rowCount2 = getRowCount();
 		assertTrue(rowCount2 + " must be less than " + rowCount1, rowCount2 < rowCount1);
 
-		int rowCount3 = rowCount2;
-		if (isOpenJPA()) {
-			System.out.println("SKIPPING criteriaDateOfBirthBefore1950 for OpenJPA because it doesn't support LocalDate in Criteria API");
-			// org.apache.openjpa.persistence.ArgumentException: The specified parameter of type "class java.time.LocalDate" is not a valid query parameter
-		}
-		else {
-			guardAjax(criteriaDateOfBirthBefore1950).click();
-			assertCriteriaState(idColumn, Between.range(50L, 150L), Long::valueOf);
-			assertCriteriaState(emailColumn, Like.startsWith("name1"), String::valueOf);
-			assertCriteriaState(genderColumn, "FEMALE");
-			assertCriteriaState(dateOfBirthColumn, Order.lessThan(LocalDate.of(1950, 1, 1)), LocalDate::parse);
-			rowCount3 = getRowCount();
-			assertTrue(rowCount3 + " must be less than " + rowCount2, rowCount3 < rowCount2);
-		}
+		guardAjax(criteriaDateOfBirthBefore1950).click();
+		assertCriteriaState(idColumn, Between.range(50L, 150L), Long::valueOf);
+		assertCriteriaState(emailColumn, Like.startsWith("name1"), String::valueOf);
+		assertCriteriaState(genderColumn, "FEMALE");
+		assertCriteriaState(dateOfBirthColumn, Order.lessThan(LocalDate.of(1950, 1, 1)), LocalDate::parse);
+		int rowCount3 = getRowCount();
+		assertTrue(rowCount3 + " must be less than " + rowCount2, rowCount3 < rowCount2);
 
 		guardAjax(criteriaIdBetween50And150).click(); // Uncheck
 		assertCriteriaState(emailColumn, Like.startsWith("name1"), String::valueOf);
@@ -851,10 +826,7 @@ public abstract class OptimusFacesIT {
 		int rowCount6 = getRowCount();
 		assertTrue(rowCount6 + " must be more than " + rowCount5, rowCount6 > rowCount5);
 
-		if (!isOpenJPA()) {
-			guardAjax(criteriaDateOfBirthBefore1950).click(); // Uncheck
-		}
-
+		guardAjax(criteriaDateOfBirthBefore1950).click(); // Uncheck
 		assertPaginatorState(1, TOTAL_RECORDS);
 	}
 
@@ -888,8 +860,7 @@ public abstract class OptimusFacesIT {
 		assertSortedState(totalPhonesColumn, true);
 		assertNoCartesianProduct();
 
-		addressStringColumnFilter.clear();
-		guardAjax(addressStringColumnFilter).sendKeys(Keys.TAB);
+		guardAjax(addressStringColumnFilter).sendKeys(Keys.BACK_SPACE, Keys.BACK_SPACE);
 		assertPaginatorState(1, TOTAL_RECORDS);
 		assertSortedState(totalPhonesColumn, true);
 		assertNoCartesianProduct();
@@ -924,8 +895,7 @@ public abstract class OptimusFacesIT {
 
 		assertNoCartesianProduct();
 
-		address_houseNumberColumnFilter.clear();
-		guardAjax(address_houseNumberColumnFilter).sendKeys(Keys.TAB);
+		guardAjax(address_houseNumberColumnFilter).sendKeys(Keys.BACK_SPACE, Keys.BACK_SPACE);
 		assertPaginatorState(1, TOTAL_RECORDS);
 
 		if (!(isHibernate() && database == POSTGRESQL)) {
@@ -935,8 +905,7 @@ public abstract class OptimusFacesIT {
 		assertNoCartesianProduct();
 
 		if (isOpenJPA() || isEclipseLink()) {
-			System.out.println("SKIPPING assertFilteredState(address.string) for OpenJPA and EclipseLink because it doesn't support derived properties like Hibernate @Formula;"
-				+ " the intended test is however already covered by testDTO().");
+			System.out.println("SKIPPING assertFilteredState(address.string) for OpenJPA and EclipseLink because it doesn't support derived properties like Hibernate @Formula; the intended test is however already covered by testDTO().");
 		}
 		else {
 			guardAjax(address_stringColumnFilter).sendKeys("11");
@@ -944,8 +913,7 @@ public abstract class OptimusFacesIT {
 			assertFilteredState(address_stringColumnFilter, "11");
 			assertNoCartesianProduct();
 
-			address_stringColumnFilter.clear();
-			guardAjax(address_stringColumnFilter).sendKeys(Keys.TAB);
+			guardAjax(address_stringColumnFilter).sendKeys(Keys.BACK_SPACE, Keys.BACK_SPACE);
 			assertPaginatorState(1, TOTAL_RECORDS);
 		}
 	}
@@ -955,50 +923,21 @@ public abstract class OptimusFacesIT {
 		assertPaginatorState(1, TOTAL_RECORDS, true);
 		testGlobalFilter(true);
 
-		if ((isEclipseLink() || isOpenJPA()) && isLazy()) {
+		boolean skipAssertSortedState = (isEclipseLink() || isOpenJPA()) && isLazy();
+
+		if (skipAssertSortedState) {
 			if (isEclipseLink()) {
-				System.out.println("SKIPPING assertSortedState(phones.number) for EclipseLink because it doesn't support join fetch with range and therefore sort can't run in same query"); // TODO: improve?
+				System.out.println("SKIPPING assertSortedState(phones.number) for EclipseLink because it doesn't support join fetch with range and therefore sorting can't run in same query"); // TODO: improve?
 			}
 			else if (isOpenJPA()) {
 				System.out.println("SKIPPING assertSortedState(phones.number) for OpenJPA because BaseEntityService somehow performs a double join for the table"); // TODO: fix it
 			}
-
-			guardAjax(phones_numberColumnFilter).sendKeys("11");
-			assertFilteredState(phones_numberColumnFilter, "11");
-			assertNoCartesianProduct();
-			int rowCount1 = getRowCount();
-			assertTrue(rowCount1 + " must be less than " + TOTAL_RECORDS, rowCount1 < TOTAL_RECORDS);
-
-			guardAjax(emailColumnFilter).sendKeys("1");
-			assertFilteredState(emailColumnFilter, "1");
-			assertFilteredState(phones_numberColumnFilter, "11");
-			assertNoCartesianProduct();
-			int rowCount3 = getRowCount();
-			assertTrue(rowCount3 + " must be less than " + rowCount1, rowCount3 < rowCount1);
-
-			phones_numberColumnFilter.clear();
-			guardAjax(phones_numberColumnFilter).sendKeys(Keys.TAB);
-			assertPaginatorState(1, 119, true);
-			assertNoCartesianProduct();
-
-			emailColumnFilter.clear();
-			guardAjax(emailColumnFilter).sendKeys(Keys.TAB);
-			assertPaginatorState(1, TOTAL_RECORDS, true);
-			assertNoCartesianProduct();
-
-			if (isEclipseLink()) {
-				System.out.println("SKIPPING assertCriteriaState(phones.type) for EclipseLink because it refuses to perform a JOIN when setFirstResult/setMaxResults is used");
-			}
-			else if (isOpenJPA()) {
-				System.out.println("SKIPPING assertCriteriaState(phones.type) for OpenJPA because it does not support setting parameters in a nested subquery");
-			}
-
-			return;
 		}
-
-		guardAjax(phones_numberColumn).click();
-		assertSortedState(phones_numberColumn, true);
-		assertNoCartesianProduct();
+		else {
+			guardAjax(phones_numberColumn).click();
+			assertSortedState(phones_numberColumn, true);
+			assertNoCartesianProduct();
+		}
 
 		guardAjax(phones_numberColumnFilter).sendKeys("11");
 		assertFilteredState(phones_numberColumnFilter, "11");
@@ -1006,68 +945,100 @@ public abstract class OptimusFacesIT {
 		int rowCount1 = getRowCount();
 		assertTrue(rowCount1 + " must be less than " + TOTAL_RECORDS, rowCount1 < TOTAL_RECORDS);
 
-		guardAjax(phones_numberColumn).click();
-		assertSortedState(phones_numberColumn, false);
-		assertNoCartesianProduct();
-		int rowCount2 = getRowCount();
-		assertEquals("rowcount is still the same", rowCount1, rowCount2);
+		if (!skipAssertSortedState) {
+			guardAjax(phones_numberColumn).click();
+			assertSortedState(phones_numberColumn, false);
+			assertNoCartesianProduct();
+			int rowCount2 = getRowCount();
+			assertEquals("rowcount is still the same", rowCount1, rowCount2);
+		}
 
 		guardAjax(emailColumnFilter).sendKeys("1");
 		assertFilteredState(emailColumnFilter, "1");
 		assertFilteredState(phones_numberColumnFilter, "11");
 		assertNoCartesianProduct();
 		int rowCount3 = getRowCount();
-		assertTrue(rowCount3 + " must be less than " + rowCount2, rowCount3 < rowCount2);
+		assertTrue(rowCount3 + " must be less than " + rowCount1, rowCount3 < rowCount1);
 
-		phones_numberColumnFilter.clear();
-		guardAjax(phones_numberColumnFilter).sendKeys(Keys.TAB);
+		guardAjax(phones_numberColumnFilter).sendKeys(Keys.BACK_SPACE, Keys.BACK_SPACE);
 		assertPaginatorState(1, 119, true);
-		assertSortedState(phones_numberColumn, false);
 		assertNoCartesianProduct();
 
-		guardAjax(phones_numberColumn).click();
-		assertSortedState(phones_numberColumn, true);
-		assertNoCartesianProduct();
-
-		emailColumnFilter.clear();
-		guardAjax(emailColumnFilter).sendKeys(Keys.TAB);
-		assertPaginatorState(1, TOTAL_RECORDS, true);
-		assertSortedState(phones_numberColumn, true);
-		assertNoCartesianProduct();
-
-		guardAjax(criteriaPhoneTypeMOBILE).click();
-		assertCriteriaState(phones_typeColumn, "MOBILE");
-		int rowCount4 = getRowCount();
-		assertTrue(rowCount4 + " must be less than " + TOTAL_RECORDS, rowCount4 < TOTAL_RECORDS);
-		assertNoCartesianProduct();
-
-		guardAjax(criteriaPhoneTypeHOME).click();
-		assertCriteriaState(phones_typeColumn, "MOBILE", "HOME");
-		int rowCount5 = getRowCount();
-		assertTrue(rowCount5 + " must be less than " + rowCount4, rowCount5 < rowCount4);
-		assertNoCartesianProduct();
-
-		guardAjax(criteriaPhoneTypeWORK).click();
-		assertCriteriaState(phones_typeColumn, "MOBILE", "HOME", "WORK");
-		int rowCount6 = getRowCount();
-		assertTrue(rowCount6 + " must be less than " + rowCount5, rowCount6 < rowCount5);
-		assertNoCartesianProduct();
-
-		guardAjax(criteriaPhoneTypeMOBILE).click(); // Uncheck
-		assertCriteriaState(phones_typeColumn, "HOME", "WORK");
-		int rowCount7 = getRowCount();
-		assertTrue(rowCount7 + " must be more than " + rowCount6, rowCount7 > rowCount6);
-		assertNoCartesianProduct();
-
-		guardAjax(criteriaPhoneTypeHOME).click(); // Uncheck
-		assertCriteriaState(phones_typeColumn, "WORK");
-		int rowCount8 = getRowCount();
-		assertTrue(rowCount8 + " must be more than " + rowCount7, rowCount8 > rowCount7);
-		assertNoCartesianProduct();
-
-		guardAjax(criteriaPhoneTypeWORK).click(); // Uncheck
+		guardAjax(emailColumnFilter).sendKeys(Keys.BACK_SPACE);
 		assertPaginatorState(1, TOTAL_RECORDS, true);
 		assertNoCartesianProduct();
+
+		if (!skipAssertSortedState) {
+			guardAjax(phones_numberColumn).click();
+			assertSortedState(phones_numberColumn, true);
+			assertNoCartesianProduct();
+		}
+
+		guardAjax(emailColumnFilter).sendKeys(Keys.BACK_SPACE);
+		assertPaginatorState(1, TOTAL_RECORDS, true);
+
+		if (!skipAssertSortedState) {
+			assertSortedState(phones_numberColumn, true);
+		}
+
+		assertNoCartesianProduct();
+
+		boolean skipAssertCriteriaState = isEclipseLink() && isLazy();
+
+		if (skipAssertCriteriaState) {
+			System.out.println("SKIPPING assertCriteriaState(phones.type) for EclipseLink because it refuses to perform a JOIN when setFirstResult/setMaxResults is used");
+		}
+		else {
+			boolean skipAssertRowCount = isOpenJPA() && isLazy();
+
+			if (skipAssertRowCount) {
+				System.out.println("SKIPPING skipAssertRowCount(phones.type) for OpenJPA because BaseEntityService somehow performs a double join for the table"); // TODO: fix it
+			}
+
+			guardAjax(criteriaPhoneTypeMOBILE).click();
+			assertCriteriaState(phones_typeColumn, "MOBILE");
+			int rowCount4 = getRowCount();
+			if (!skipAssertRowCount) {
+				assertTrue(rowCount4 + " must be less than " + TOTAL_RECORDS, rowCount4 < TOTAL_RECORDS);
+			}
+			assertNoCartesianProduct();
+
+			guardAjax(criteriaPhoneTypeHOME).click();
+			assertCriteriaState(phones_typeColumn, "MOBILE", "HOME");
+			int rowCount5 = getRowCount();
+			if (!skipAssertRowCount) {
+				assertTrue(rowCount5 + " must be less than " + rowCount4, rowCount5 < rowCount4);
+			}
+			assertNoCartesianProduct();
+
+			guardAjax(criteriaPhoneTypeWORK).click();
+			assertCriteriaState(phones_typeColumn, "MOBILE", "HOME", "WORK");
+			int rowCount6 = getRowCount();
+			if (!skipAssertRowCount) {
+				assertTrue(rowCount6 + " must be less than " + rowCount5, rowCount6 < rowCount5);
+			}
+			assertNoCartesianProduct();
+
+			guardAjax(criteriaPhoneTypeMOBILE).click(); // Uncheck
+			assertCriteriaState(phones_typeColumn, "HOME", "WORK");
+			int rowCount7 = getRowCount();
+			if (!skipAssertRowCount) {
+				assertTrue(rowCount7 + " must be more than " + rowCount6, rowCount7 > rowCount6);
+			}
+			assertNoCartesianProduct();
+
+			guardAjax(criteriaPhoneTypeHOME).click(); // Uncheck
+			assertCriteriaState(phones_typeColumn, "WORK");
+			int rowCount8 = getRowCount();
+			if (!skipAssertRowCount) {
+				assertTrue(rowCount8 + " must be more than " + rowCount7, rowCount8 > rowCount7);
+			}
+			assertNoCartesianProduct();
+
+			guardAjax(criteriaPhoneTypeWORK).click(); // Uncheck
+			assertPaginatorState(1, TOTAL_RECORDS, true);
+			assertNoCartesianProduct();
+		}
 	}
 
 	protected void testElementCollection() {
@@ -1149,8 +1120,7 @@ public abstract class OptimusFacesIT {
 		assertFilteredState(idColumnFilter, "2");
 		assertNoCartesianProduct();
 
-		idColumnFilter.clear();
-		guardAjax(idColumnFilter).sendKeys(Keys.TAB);
+		guardAjax(idColumnFilter).sendKeys(Keys.BACK_SPACE);
 		assertGlobalFilterState("19");
 		assertSortedState(emailColumn, true);
 		assertNoCartesianProduct();
@@ -1167,8 +1137,7 @@ public abstract class OptimusFacesIT {
 		assertSortedState(emailColumn, true);
 		assertNoCartesianProduct();
 
-		emailColumnFilter.clear();
-		guardAjax(emailColumnFilter).sendKeys(Keys.TAB);
+		guardAjax(emailColumnFilter).sendKeys(Keys.BACK_SPACE);
 		assertPaginatorState(1, totalRecords);
 		assertSortedState(emailColumn, true);
 		assertNoCartesianProduct();
@@ -1194,8 +1163,7 @@ public abstract class OptimusFacesIT {
 		assertFilteredState(idColumnFilter, "2");
 		assertNoCartesianProduct();
 
-		idColumnFilter.clear();
-		guardAjax(idColumnFilter).sendKeys(Keys.TAB);
+		guardAjax(idColumnFilter).sendKeys(Keys.BACK_SPACE);
 		assertPaginatorState(1, 111);
 		assertSortedState(emailColumn, true);
 		assertGlobalFilterState("name1");
@@ -1249,7 +1217,7 @@ public abstract class OptimusFacesIT {
 		String field = column.findElement(By.cssSelector(".ui-column-title")).getText();
 		String sortableColumnClass = column.findElement(By.cssSelector(".ui-sortable-column-icon")).getAttribute("class");
 
-		assertTrue(field + " column must be active", activeColumn.getText().equals(field));
+		assertTrue(field + " column must be active", activeColumn.findElement(By.cssSelector(".ui-column-title")).getText().equals(field));
 		assertEquals(field + " column must be sorted", ascending, sortableColumnClass.contains("ui-icon-triangle-1-n"));
 		assertEquals("order query string", (isDefaultOrderBy && !ascending) ? null : ((ascending ? "" : "-") + field), getQueryParameter(QUERY_PARAMETER_ORDER));
 

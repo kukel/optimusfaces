@@ -19,7 +19,7 @@
 	<url>http://omnifaces.org</url>
 	<organization>
 		<name>OmniFaces</name>
-		<url>http://omnifaces.org</url>
+		<url>https://omnifaces.org</url>
 	</organization>
 	<inceptionYear>2016</inceptionYear>
 
@@ -39,7 +39,7 @@
 	<licenses>
 		<license>
 			<name>The Apache Software License, Version 2.0</name>
-			<url>http://www.apache.org/licenses/LICENSE-2.0.txt</url>
+			<url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
 			<distribution>repo</distribution>
 		</license>
 	</licenses>
@@ -50,20 +50,6 @@
 		<developerConnection>scm:git:git@github.com:omnifaces/optimusfaces.git</developerConnection>
 	</scm>
 
-	<repositories>
-		<repository>
-			<id>ossrh</id>
-			<url>http://oss.sonatype.org/content/repositories/snapshots</url>
-			<releases>
-				<enabled>false</enabled>
-			</releases>
-			<snapshots>
-				<enabled>true</enabled>
-				<updatePolicy>always</updatePolicy>
-			</snapshots>
-		</repository>
-	</repositories>
-
 	<distributionManagement>
 		<snapshotRepository>
 			<id>ossrh</id>
@@ -73,7 +59,7 @@
 
 	<properties>
 
-		<!-- Java versions. -->
+		<!-- Minimum required Java versions. -->
 		<javase.version>1.8</javase.version>
 		<javaee.version>7</javaee.version>
 		
@@ -85,16 +71,16 @@
 		<maven.source.excludeResources>true</maven.source.excludeResources>
 
 		<!-- Test versions. -->
-		<test.wildfly.version>13.0.0.Final</test.wildfly.version>
-		<test.payara.version>5.182</test.payara.version>
-		<test.tomee.version>7.0.5</test.tomee.version> <!-- TODO: upgrade to Java EE 8 compatible version. -->
-		<test.wildfly-eclipselink.version>2.7.1</test.wildfly-eclipselink.version>
-		<test.payara-hibernate.version>5.3.4.Final</test.payara-hibernate.version>
-		<test.h2.version>1.4.197</test.h2.version>
-		<test.mysql-driver.version>5.1.45</test.mysql-driver.version>
-		<test.postgresql-driver.version>42.2.1</test.postgresql-driver.version>
-		<test.omnifaces.version>3.2</test.omnifaces.version>
-		<test.primefaces.version>6.1</test.primefaces.version> <!-- TODO: upgrade to 6.2+ once IT problem with paginator state is solved. -->
+		<test.wildfly.version>19.0.0.Final</test.wildfly.version>
+		<test.payara.version>5.201</test.payara.version>
+		<test.tomee.version>8.0.1</test.tomee.version>
+		<test.wildfly-eclipselink.version>2.7.6</test.wildfly-eclipselink.version>
+		<test.payara-hibernate.version>5.4.12.Final</test.payara-hibernate.version>
+		<test.h2.version>1.4.200</test.h2.version>
+		<test.mysql-driver.version>8.0.19</test.mysql-driver.version>
+		<test.postgresql-driver.version>42.2.11</test.postgresql-driver.version>
+		<test.omnifaces.version>3.4.1</test.omnifaces.version>
+		<test.primefaces.version>8.0</test.primefaces.version>
 	</properties>
 
 	<dependencies>
@@ -103,8 +89,8 @@
 		<dependency>
 			<groupId>javax</groupId>
 			<artifactId>javaee-web-api</artifactId>
-			<version>7.0</version>
-			<scope>provided</scope>
+			<version>${javaee.version}.0</version><!-- minimum version for OmniFaces 2.2 -->
+			<scope>provided</scope><!-- by enduser (of course enduser can provide a newer version) -->
 		</dependency>
 
 		<!-- OmniFaces dependencies. -->
@@ -117,7 +103,7 @@
 		<dependency>
 			<groupId>org.omnifaces</groupId>
 			<artifactId>omnipersistence</artifactId>
-			<version>0.8</version>
+			<version>0.12</version>
 		</dependency>
 
 		<!-- PrimeFaces dependencies. -->
@@ -141,9 +127,15 @@
 			<scope>test</scope>
 		</dependency>
 		<dependency>
+			<groupId>org.jboss.shrinkwrap.resolver</groupId>
+			<artifactId>shrinkwrap-resolver-depchain</artifactId>
+			<type>pom</type>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
 			<groupId>org.jboss.arquillian.graphene</groupId>
 			<artifactId>graphene-webdriver</artifactId>
-			<version>2.1.0.Final</version>
+			<version>2.3.2</version>
 			<type>pom</type>
 			<scope>test</scope>
 		</dependency>
@@ -168,14 +160,28 @@
 			<dependency>
 				<groupId>org.jboss.arquillian</groupId>
 				<artifactId>arquillian-bom</artifactId>
-				<version>1.4.0.Final</version>
+				<version>1.6.0.Final</version>
 				<type>pom</type>
 				<scope>import</scope>
 			</dependency>
 			<dependency>
 				<groupId>org.jboss.arquillian.extension</groupId>
 				<artifactId>arquillian-drone-bom</artifactId>
-				<version>2.0.1.Final</version>
+				<version>2.5.1</version>
+				<type>pom</type>
+				<scope>import</scope>
+			</dependency>
+			<dependency>
+				<groupId>org.jboss.shrinkwrap.resolver</groupId>
+				<artifactId>shrinkwrap-resolver-bom</artifactId>
+				<version>3.1.4</version>
+				<type>pom</type>
+				<scope>test</scope>
+			</dependency>
+			<dependency>
+				<groupId>org.jboss.arquillian.selenium</groupId>
+				<artifactId>selenium-bom</artifactId>
+				<version>3.13.0</version>
 				<type>pom</type>
 				<scope>import</scope>
 			</dependency>
@@ -252,7 +258,7 @@
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-jar-plugin</artifactId>
-				<version>3.0.2</version>
+				<version>3.2.0</version>
 				<configuration>
 					<archive>
 						<manifest>
@@ -271,7 +277,7 @@
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-source-plugin</artifactId>
-				<version>3.0.1</version>
+				<version>3.2.1</version>
 				<executions>
 					<execution>
 						<id>attach-sources</id>
@@ -286,15 +292,15 @@
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-javadoc-plugin</artifactId>
-				<version>3.0.0</version>
+				<version>3.2.0</version>
 				<configuration>
 					<javadocVersion>${javase.version}</javadocVersion>
 					<notimestamp>true</notimestamp>
 					<splitindex>true</splitindex>
 					<doctitle>OptimusFaces API documentation</doctitle>
 					<links>
-						<link>https://docs.oracle.com/javaee/${javaee.version}/api/</link>
-						<link>https://static.javadoc.io/org.omnifaces/omnipersistence/0.5/</link>
+						<link>https://javaee.github.io/javaee-spec/javadocs/</link>
+						<link>https://static.javadoc.io/org.omnifaces/omnipersistence/0.12/</link>
 					</links>
 					<additionalJOption>-J-Dhttp.agent=maven-javadoc-plugin-${pom‌​.name}</additionalJOption>
 				</configuration>
@@ -372,7 +378,7 @@
 				<plugin>
 					<groupId>org.apache.maven.plugins</groupId>
 					<artifactId>maven-dependency-plugin</artifactId>
-					<version>3.0.2</version>
+					<version>3.1.2</version>
 					<executions>
 						<execution>
 							<phase>process-test-classes</phase>
@@ -388,7 +394,7 @@
 				<plugin>
 					<groupId>org.apache.maven.plugins</groupId>
 					<artifactId>maven-failsafe-plugin</artifactId>
-					<version>2.20.1</version>
+					<version>2.22.2</version>
 					<executions>
 						<execution>
 							<goals>
@@ -427,7 +433,7 @@
 				<dependency>
 					<groupId>org.wildfly.arquillian</groupId>
 					<artifactId>wildfly-arquillian-container-managed</artifactId>
-					<version>2.1.0.Final</version>
+					<version>2.2.0.Final</version>
 					<scope>test</scope>
 				</dependency>
 			</dependencies>
@@ -510,7 +516,7 @@
 				<dependency>
 					<groupId>org.wildfly.arquillian</groupId>
 					<artifactId>wildfly-arquillian-container-managed</artifactId>
-					<version>2.1.0.Final</version>
+					<version>2.2.0.Final</version>
 					<scope>test</scope>
 				</dependency>
 			</dependencies>
@@ -594,7 +600,7 @@
 					<plugin>
 						<groupId>org.apache.maven.plugins</groupId>
 						<artifactId>maven-resources-plugin</artifactId>
-						<version>3.0.2</version>
+						<version>3.1.0</version>
 						<executions>
 							<execution>
 								<id>register-eclipselink-in-wildfly</id>
